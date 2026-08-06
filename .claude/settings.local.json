@@ -10,7 +10,8 @@
       "Bash(npx tsc *)",
       "Bash(npx eslint *)",
       "PowerShell(Get-Process node -ErrorAction SilentlyContinue)",
-      "PowerShell(robocopy \"C:\\\\Users\\\\srava\\\\OneDrive\\\\Desktop\\\\Notes Repo\" \"C:\\\\Users\\\\srava\\\\Projects\\\\notes-repo\" /E /XD node_modules .next /R:1 /W:1; Write-Host \"Exit code: $LASTEXITCODE\")"
+      "PowerShell(robocopy \"C:\\\\Users\\\\srava\\\\OneDrive\\\\Desktop\\\\Notes Repo\" \"C:\\\\Users\\\\srava\\\\Projects\\\\notes-repo\" /E /XD node_modules .next /R:1 /W:1; Write-Host \"Exit code: $LASTEXITCODE\")",
+      "mcp__originkit__list_components"
     ]
   }
 }

@@ -18,7 +18,7 @@ export default function NavBar() {
 
   async function handleLogout() {
     await signOut();
-    router.push("/login");
+    router.push("/");
     router.refresh();
   }
 
