@@ -113,7 +113,7 @@ export default function EditNotePage() {
           </p>
           <Link
             href="/dashboard"
-            className="mt-6 inline-block rounded-lg bg-gradient-to-r from-teal-600 via-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-600/20"
+            className="mt-6 inline-block rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-amber-500/25"
           >
             Back to dashboard
           </Link>
@@ -152,7 +152,7 @@ export default function EditNotePage() {
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
               />
             </div>
 
@@ -164,7 +164,7 @@ export default function EditNotePage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
-                className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
               />
             </div>
 
@@ -180,13 +180,13 @@ export default function EditNotePage() {
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
-                      className="flex items-center gap-1 rounded-full bg-teal-500/15 px-2.5 py-0.5 text-xs font-medium text-teal-700 dark:text-teal-400"
+                      className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-white/10 dark:text-slate-300"
                     >
                       {tag.name}
                       <button
                         type="button"
                         onClick={() => removeTag(tag.id)}
-                        className="text-teal-500 hover:text-teal-700"
+                        className="text-slate-400 hover:text-slate-600"
                         aria-label={`Remove ${tag.name}`}
                       >
                         ×
@@ -201,7 +201,7 @@ export default function EditNotePage() {
                   value={tagQuery}
                   onChange={(e) => setTagQuery(e.target.value)}
                   placeholder="Search tags…"
-                  className="w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                  className="w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
                 />
                 {tagQuery.trim() && tagSuggestions.length > 0 && (
                   <div className="absolute z-10 mt-1 w-full rounded-lg border border-white/40 bg-white/90 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/90">
@@ -232,7 +232,7 @@ export default function EditNotePage() {
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={saving}
-                className="rounded-lg bg-gradient-to-r from-teal-600 via-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-600/20 disabled:opacity-60"
+                className="rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-amber-500/25 disabled:opacity-60"
               >
                 {saving ? "Saving…" : "Save changes"}
               </motion.button>

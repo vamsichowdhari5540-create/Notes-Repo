@@ -52,6 +52,10 @@ export default function BrowsePage() {
               <motion.div key={subject.id} variants={fadeInUp}>
                 <Link href={user ? `/browse/${subject.id}` : "/signup"}>
                   <Card hover className="p-5">
+                    <div
+                      aria-hidden
+                      className="mb-3 h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_10px_3px_rgba(251,191,36,0.6)]"
+                    />
                     <h2 className="text-base font-semibold">{subject.name}</h2>
                     <p className="mt-1 text-sm text-[var(--muted)]">
                       {subject.code}

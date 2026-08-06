@@ -188,7 +188,7 @@ export default function UnitNotesPage() {
                 </p>
                 <Link
                   href={`/upload?unit=${unit.id}`}
-                  className="rounded-lg bg-gradient-to-r from-teal-600 via-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-600/20"
+                  className="rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-amber-500/25"
                 >
                   Upload the first note
                 </Link>

@@ -68,7 +68,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
               />
             </div>
             <div>
@@ -84,7 +84,7 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
               />
             </div>
 
@@ -99,7 +99,7 @@ export default function LoginPage() {
               whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={submitting}
-              className="mt-2 rounded-lg bg-gradient-to-r from-teal-600 via-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-600/20 disabled:opacity-60"
+              className="mt-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-amber-500/25 disabled:opacity-60"
             >
               {submitting ? "Logging in…" : "Log in"}
             </motion.button>
@@ -111,7 +111,7 @@ export default function LoginPage() {
 
           <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">
+            <Link href="/signup" className="font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400">
               Sign up
             </Link>
           </p>

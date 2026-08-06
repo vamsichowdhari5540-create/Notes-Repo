@@ -1,10 +1,10 @@
 "use client";
 
 import { motion, type HTMLMotionProps } from "framer-motion";
-import { cardHover } from "@/lib/motion";
 
-type CardProps = HTMLMotionProps<"div"> & {
+type CardProps = Omit<HTMLMotionProps<"div">, "children"> & {
   hover?: boolean;
+  children?: React.ReactNode;
 };
 
 export default function Card({
@@ -15,11 +15,13 @@ export default function Card({
 }: CardProps) {
   return (
     <motion.div
-      initial="rest"
-      whileHover={hover ? "hover" : undefined}
-      variants={hover ? cardHover : undefined}
-      style={{ perspective: 1000 }}
-      className={`rounded-2xl border border-white/40 bg-white/60 shadow-xl shadow-slate-900/5 backdrop-blur-xl dark:border-white/10 dark:bg-white/5 ${className}`}
+      whileHover={hover ? { y: -6 } : undefined}
+      transition={{ type: "spring", stiffness: 260, damping: 24, mass: 0.6 }}
+      className={`rounded-[28px] border-2 bg-white shadow-xl shadow-slate-900/10 transition-colors duration-200 dark:bg-white/5 dark:shadow-black/30 ${
+        hover
+          ? "border-slate-200/80 hover:border-amber-400 dark:border-white/10 dark:hover:border-amber-400/60"
+          : "border-slate-200/80 dark:border-white/10"
+      } ${className}`}
       {...props}
     >
       {children}

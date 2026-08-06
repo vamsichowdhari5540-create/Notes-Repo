@@ -156,7 +156,7 @@ export default function DashboardPage() {
           >
             <Link
               href="/login"
-              className="inline-block rounded-lg bg-gradient-to-r from-teal-600 via-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-600/20"
+              className="inline-block rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-amber-500/25"
             >
               Log in
             </Link>
@@ -211,7 +211,7 @@ export default function DashboardPage() {
                     value={branch}
                     onChange={(e) => setBranch(e.target.value)}
                     placeholder="e.g. CSE"
-                    className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                    className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
                   />
                 </div>
                 <div>
@@ -225,7 +225,7 @@ export default function DashboardPage() {
                     value={year}
                     onChange={(e) => setYear(e.target.value)}
                     placeholder="e.g. 2"
-                    className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                    className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
                   />
                 </div>
                 <motion.button
@@ -233,7 +233,7 @@ export default function DashboardPage() {
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={savingProfile}
-                  className="mt-1 rounded-lg bg-gradient-to-r from-teal-600 via-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-600/20 disabled:opacity-60"
+                  className="mt-1 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-amber-500/25 disabled:opacity-60"
                 >
                   {savingProfile ? "Saving…" : "Save profile"}
                 </motion.button>
@@ -273,7 +273,7 @@ export default function DashboardPage() {
                   </p>
                   <Link
                     href="/upload"
-                    className="rounded-lg bg-gradient-to-r from-teal-600 via-indigo-600 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-600/20"
+                    className="rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-amber-500/25"
                   >
                     Upload a note
                   </Link>

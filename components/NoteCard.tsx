@@ -111,21 +111,31 @@ export default function NoteCard({
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-4">
-        <a
-          href={note.file_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => onView?.(note.id)}
-          className="text-sm font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
-        >
-          View
-        </a>
+        {note.file_type === "pdf" ? (
+          <Link
+            href={`/notes/${note.id}/flipbook`}
+            onClick={() => onView?.(note.id)}
+            className="text-sm font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400"
+          >
+            View in 3D
+          </Link>
+        ) : (
+          <a
+            href={note.file_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => onView?.(note.id)}
+            className="text-sm font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400"
+          >
+            View
+          </a>
+        )}
         <motion.button
           type="button"
           whileTap={{ scale: 0.95 }}
           onClick={handleDownload}
           disabled={downloading}
-          className="text-sm font-medium text-indigo-600 hover:text-indigo-700 disabled:opacity-60 dark:text-indigo-400"
+          className="text-sm font-medium text-amber-600 hover:text-amber-700 disabled:opacity-60 dark:text-amber-400"
         >
           {downloading ? "Downloading…" : "Download"}
         </motion.button>

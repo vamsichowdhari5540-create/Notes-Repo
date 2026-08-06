@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import NavBar from "@/components/NavBar";
 import PageTransition from "@/components/PageTransition";
-import BackgroundBlobs from "@/components/BackgroundBlobs";
 import MotionProvider from "@/components/MotionProvider";
 import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
@@ -26,7 +25,6 @@ export default function RootLayout({
     <html lang="en" className={`h-full ${inter.variable}`}>
       <body className="min-h-full flex flex-col font-sans antialiased">
         <MotionProvider>
-          <BackgroundBlobs />
           <AuthProvider>
             <NavBar />
             <main className="flex-1">
