@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes create-next-app@latest notes-repo-tmp --typescript --tailwind --app --eslint --src-dir=false --import-alias \"@/*\" --use-npm --no-turbopack)",
+      "Bash(npm install *)",
+      "Bash(rm -f public/file.svg public/globe.svg public/next.svg public/vercel.svg public/window.svg)",
+      "Bash(npm run *)",
+      "Bash(mkdir -p \"/c/Users/srava/OneDrive/Desktop/Notes Repo/app/browse/[subjectId]\" \"/c/Users/srava/OneDrive/Desktop/Notes Repo/app/units/[unitId]\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/upload)",
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)",
+      "PowerShell(Get-Process node -ErrorAction SilentlyContinue)",
+      "PowerShell(robocopy \"C:\\\\Users\\\\srava\\\\OneDrive\\\\Desktop\\\\Notes Repo\" \"C:\\\\Users\\\\srava\\\\Projects\\\\notes-repo\" /E /XD node_modules .next /R:1 /W:1; Write-Host \"Exit code: $LASTEXITCODE\")"
+    ]
+  }
+}

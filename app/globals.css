@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --card: #ffffff;
+  --accent: #4f46e5;
+  --accent-foreground: #ffffff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-inter);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b1120;
+    --foreground: #e2e8f0;
+    --muted: #94a3b8;
+    --border: rgba(255, 255, 255, 0.1);
+    --card: #111113;
+    --accent: #818cf8;
+    --accent-foreground: #0b1120;
+  }
+}
+
+body {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% -10%, rgba(45, 212, 191, 0.12), transparent),
+    radial-gradient(ellipse 70% 60% at 90% 20%, rgba(129, 140, 248, 0.12), transparent),
+    var(--background);
+  color: var(--foreground);
+  min-height: 100vh;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+[contenteditable] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+@keyframes blob-float-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, 30px) scale(1.08); }
+  66% { transform: translate(-20px, 50px) scale(0.95); }
+}
+
+@keyframes blob-float-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-50px, 20px) scale(1.05); }
+  66% { transform: translate(30px, -30px) scale(0.92); }
+}
+
+@keyframes blob-float-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(25px, -40px) scale(1.1); }
+}
+
+.blob {
+  animation: blob-float-1 18s ease-in-out infinite;
+}
+
+.blob-delayed {
+  animation: blob-float-2 22s ease-in-out infinite;
+  animation-delay: -4s;
+}
+
+.blob-slow {
+  animation: blob-float-3 26s ease-in-out infinite;
+  animation-delay: -8s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob,
+  .blob-delayed,
+  .blob-slow {
+    animation: none;
+  }
+}
