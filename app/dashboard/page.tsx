@@ -183,50 +183,66 @@ export default function DashboardPage() {
         <>
           <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Card className="p-6 lg:col-span-1">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                Profile
-              </h2>
-              <dl className="mt-4 space-y-2 text-sm">
-                <div>
-                  <dt className="text-slate-500 dark:text-slate-400">Name</dt>
-                  <dd className="font-medium text-slate-900 dark:text-slate-100">
-                    {profile?.name}
-                  </dd>
+              <div className="flex flex-col items-center text-center">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 via-orange-500 to-rose-500 text-2xl font-bold text-white shadow-lg shadow-amber-500/25">
+                  {(profile?.name ?? "?")
+                    .trim()
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map((part) => part[0]?.toUpperCase())
+                    .join("")}
                 </div>
-                <div>
-                  <dt className="text-slate-500 dark:text-slate-400">Email</dt>
-                  <dd className="font-medium text-slate-900 dark:text-slate-100">
-                    {profile?.email}
-                  </dd>
-                </div>
-              </dl>
+                <h2 className="mt-3 text-lg font-bold text-slate-900 dark:text-slate-100">
+                  {profile?.name}
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {profile?.email}
+                </p>
 
-              <form onSubmit={handleSaveProfile} className="mt-5 flex flex-col gap-3 border-t border-white/20 pt-5 dark:border-white/10">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Branch
-                  </label>
-                  <input
-                    type="text"
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    placeholder="e.g. CSE"
-                    className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Year
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={6}
-                    value={year}
-                    onChange={(e) => setYear(e.target.value)}
-                    placeholder="e.g. 2"
-                    className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
-                  />
+                {(profile?.branch || profile?.year) && (
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    {profile?.branch && (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                        {profile.branch}
+                      </span>
+                    )}
+                    {profile?.year && (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                        Year {profile.year}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={handleSaveProfile} className="mt-6 flex flex-col gap-3 border-t border-slate-200/80 pt-5 dark:border-white/10">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Branch
+                    </label>
+                    <input
+                      type="text"
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      placeholder="e.g. CSE"
+                      className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Year
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={6}
+                      value={year}
+                      onChange={(e) => setYear(e.target.value)}
+                      placeholder="e.g. 2"
+                      className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                    />
+                  </div>
                 </div>
                 <motion.button
                   whileHover={{ scale: 1.02 }}
