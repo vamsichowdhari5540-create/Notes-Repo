@@ -15,6 +15,7 @@ import { CardSkeletonGrid } from "@/components/Skeleton";
 import NoteCard from "@/components/NoteCard";
 import Card from "@/components/Card";
 import Toast from "@/components/Toast";
+import Avatar from "@/components/Avatar";
 import { fadeInUp, staggerContainer } from "@/lib/motion";
 import type { NoteWithMeta, Profile, RecentlyViewedNote } from "@/lib/types";
 
@@ -31,6 +32,7 @@ export default function DashboardPage() {
   const [branch, setBranch] = useState("");
   const [year, setYear] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export default function DashboardPage() {
         await Promise.all([
           supabase
             .from("users")
-            .select("id, name, email, branch, year")
+            .select("id, name, email, branch, year, avatar_url")
             .eq("id", user!.id)
             .single(),
           getNotesForUser(supabase, user!.id),
@@ -125,7 +127,7 @@ export default function DashboardPage() {
         year: year.trim() ? Number(year) : null,
       })
       .eq("id", user.id)
-      .select("id, name, email, branch, year")
+      .select("id, name, email, branch, year, avatar_url")
       .single();
 
     setSavingProfile(false);
@@ -134,6 +136,58 @@ export default function DashboardPage() {
       setProfile(data);
       setToast("Profile updated!");
     }
+  }
+
+  async function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !user) return;
+
+    if (!file.type.startsWith("image/")) {
+      setToast("Please choose an image file.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setToast("Image must be under 2MB.");
+      return;
+    }
+
+    setUploadingAvatar(true);
+
+    const ext = file.name.split(".").pop() ?? "png";
+    const path = `${user.id}/avatar.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(path, file, { upsert: true });
+
+    if (uploadError) {
+      setUploadingAvatar(false);
+      setToast("Couldn't upload that image.");
+      return;
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("avatars").getPublicUrl(path);
+    const avatarUrl = `${publicUrl}?t=${Date.now()}`;
+
+    const { data, error } = await supabase
+      .from("users")
+      .update({ avatar_url: avatarUrl })
+      .eq("id", user.id)
+      .select("id, name, email, branch, year, avatar_url")
+      .single();
+
+    if (!error && data) {
+      setProfile(data);
+      await supabase.auth.updateUser({ data: { avatar_url: avatarUrl } });
+      setToast("Profile picture updated!");
+    } else {
+      setToast("Couldn't save your profile picture.");
+    }
+
+    setUploadingAvatar(false);
   }
 
   const totalNotes = notes.length;
@@ -184,14 +238,19 @@ export default function DashboardPage() {
           <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Card className="p-6 lg:col-span-1">
               <div className="flex flex-col items-center text-center">
-                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 via-orange-500 to-rose-500 text-2xl font-bold text-white shadow-lg shadow-amber-500/25">
-                  {(profile?.name ?? "?")
-                    .trim()
-                    .split(/\s+/)
-                    .slice(0, 2)
-                    .map((part) => part[0]?.toUpperCase())
-                    .join("")}
-                </div>
+                <label className="group relative cursor-pointer">
+                  <Avatar src={profile?.avatar_url} name={profile?.name ?? "?"} size="md" />
+                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-xs font-medium text-transparent transition-colors group-hover:bg-black/40 group-hover:text-white">
+                    {uploadingAvatar ? "…" : "Change"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarChange}
+                    disabled={uploadingAvatar}
+                    className="sr-only"
+                  />
+                </label>
                 <h2 className="mt-3 text-lg font-bold text-slate-900 dark:text-slate-100">
                   {profile?.name}
                 </h2>

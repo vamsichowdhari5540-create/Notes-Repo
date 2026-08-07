@@ -24,6 +24,7 @@ export type Profile = {
   email: string;
   branch: string | null;
   year: number | null;
+  avatar_url: string | null;
 };
 
 export type NoteWithMeta = {

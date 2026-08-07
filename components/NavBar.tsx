@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
+import Avatar from "@/components/Avatar";
 
 const navLinks = [
   { href: "/browse", label: "Browse" },
@@ -46,11 +47,12 @@ export default function NavBar() {
           <div className="flex items-center gap-3">
             {user ? (
               <>
-                <Link
-                  href="/dashboard"
-                  className="hidden text-sm font-bold text-slate-700 hover:text-amber-600 sm:inline dark:text-slate-300"
-                >
-                  {user.user_metadata?.name ?? user.email}
+                <Link href="/dashboard" aria-label="Your dashboard" className="shrink-0">
+                  <Avatar
+                    src={user.user_metadata?.avatar_url}
+                    name={user.user_metadata?.name ?? user.email ?? "?"}
+                    size="sm"
+                  />
                 </Link>
                 <motion.button
                   whileHover={{ scale: 1.04 }}
