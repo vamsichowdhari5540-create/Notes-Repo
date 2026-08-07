@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import Card from "@/components/Card";
 import OAuthButtons from "@/components/OAuthButtons";
+import { PerspectiveBackground } from "@/components/originkit/ui/hero-03/perspective-background";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,13 +39,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-73px)] items-center justify-center px-6 py-12">
+    <div className="relative flex min-h-[calc(100vh-73px)] items-center justify-center overflow-hidden px-6 py-12">
+      <div className="absolute inset-0 -z-10">
+        <PerspectiveBackground />
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 20, rotateX: -8 }}
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
         style={{ perspective: 1000 }}
-        className="w-full max-w-sm"
+        className="relative z-10 w-full max-w-sm"
       >
         <Card className="p-8">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
