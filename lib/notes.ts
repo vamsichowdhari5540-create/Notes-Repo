@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { LeaderboardEntry, NoteWithMeta, RecentlyViewedNote } from "@/lib/types";
+import type {
+  LeaderboardEntry,
+  NewNoteNotification,
+  NoteWithMeta,
+  RecentlyViewedNote,
+} from "@/lib/types";
 
 type RawNoteRow = {
   id: string;
@@ -18,15 +23,16 @@ const NOTE_SELECT = `id, title, description, file_url, file_type, upvote_count, 
        users ( name ),
        note_tags ( tags ( id, name ) )`;
 
-async function getUpvotedNoteIds(
+async function getInteractedNoteIds(
   supabase: SupabaseClient,
+  table: "upvotes" | "bookmarks",
   currentUserId: string | null,
   noteIds: string[]
 ): Promise<Set<string>> {
   if (!currentUserId || noteIds.length === 0) return new Set();
 
   const { data, error } = await supabase
-    .from("upvotes")
+    .from(table)
     .select("note_id")
     .eq("user_id", currentUserId)
     .in("note_id", noteIds);
@@ -35,9 +41,26 @@ async function getUpvotedNoteIds(
   return new Set((data ?? []).map((row) => row.note_id));
 }
 
+async function getUpvotedNoteIds(
+  supabase: SupabaseClient,
+  currentUserId: string | null,
+  noteIds: string[]
+): Promise<Set<string>> {
+  return getInteractedNoteIds(supabase, "upvotes", currentUserId, noteIds);
+}
+
+async function getBookmarkedNoteIds(
+  supabase: SupabaseClient,
+  currentUserId: string | null,
+  noteIds: string[]
+): Promise<Set<string>> {
+  return getInteractedNoteIds(supabase, "bookmarks", currentUserId, noteIds);
+}
+
 function toNoteWithMeta(
   row: RawNoteRow,
-  upvotedNoteIds: Set<string>
+  upvotedNoteIds: Set<string>,
+  bookmarkedNoteIds: Set<string> = new Set()
 ): NoteWithMeta {
   return {
     id: row.id,
@@ -53,6 +76,7 @@ function toNoteWithMeta(
       .map((nt) => nt.tags)
       .filter((tag): tag is { id: string; name: string } => tag !== null),
     upvoted_by_me: upvotedNoteIds.has(row.id),
+    bookmarked_by_me: bookmarkedNoteIds.has(row.id),
   };
 }
 
@@ -73,13 +97,13 @@ export async function getNotesForUnit(
   if (error) throw error;
 
   const rows = (data ?? []) as unknown as RawNoteRow[];
-  const upvotedNoteIds = await getUpvotedNoteIds(
-    supabase,
-    currentUserId,
-    rows.map((row) => row.id)
-  );
+  const noteIds = rows.map((row) => row.id);
+  const [upvotedNoteIds, bookmarkedNoteIds] = await Promise.all([
+    getUpvotedNoteIds(supabase, currentUserId, noteIds),
+    getBookmarkedNoteIds(supabase, currentUserId, noteIds),
+  ]);
 
-  return rows.map((row) => toNoteWithMeta(row, upvotedNoteIds));
+  return rows.map((row) => toNoteWithMeta(row, upvotedNoteIds, bookmarkedNoteIds));
 }
 
 export async function getNotesForUser(
@@ -95,13 +119,13 @@ export async function getNotesForUser(
   if (error) throw error;
 
   const rows = (data ?? []) as unknown as RawNoteRow[];
-  const upvotedNoteIds = await getUpvotedNoteIds(
-    supabase,
-    userId,
-    rows.map((row) => row.id)
-  );
+  const noteIds = rows.map((row) => row.id);
+  const [upvotedNoteIds, bookmarkedNoteIds] = await Promise.all([
+    getUpvotedNoteIds(supabase, userId, noteIds),
+    getBookmarkedNoteIds(supabase, userId, noteIds),
+  ]);
 
-  return rows.map((row) => toNoteWithMeta(row, upvotedNoteIds));
+  return rows.map((row) => toNoteWithMeta(row, upvotedNoteIds, bookmarkedNoteIds));
 }
 
 export async function getNoteById(
@@ -122,13 +146,15 @@ export async function getNoteById(
 export async function updateNote(
   supabase: SupabaseClient,
   noteId: string,
+  currentUserId: string,
   updates: { title: string; description: string | null },
   tagIds: string[]
 ) {
   const { error: updateError } = await supabase
     .from("notes")
     .update(updates)
-    .eq("id", noteId);
+    .eq("id", noteId)
+    .eq("user_id", currentUserId);
   if (updateError) throw updateError;
 
   const { error: deleteTagsError } = await supabase
@@ -145,9 +171,67 @@ export async function updateNote(
   }
 }
 
-export async function deleteNote(supabase: SupabaseClient, noteId: string) {
-  const { error } = await supabase.from("notes").delete().eq("id", noteId);
+export async function deleteNote(
+  supabase: SupabaseClient,
+  noteId: string,
+  currentUserId: string
+) {
+  const { error } = await supabase
+    .from("notes")
+    .delete()
+    .eq("id", noteId)
+    .eq("user_id", currentUserId);
   if (error) throw error;
+}
+
+/**
+ * Swaps the underlying file on an existing note (e.g. replacing a blurry
+ * scan with a clearer one) without touching its id, upvotes, or upload
+ * history — only the owner can do this.
+ */
+export async function replaceNoteFile(
+  supabase: SupabaseClient,
+  noteId: string,
+  currentUserId: string,
+  update: { file_url: string; file_type: string; content_text: string | null }
+) {
+  const { error } = await supabase
+    .from("notes")
+    .update(update)
+    .eq("id", noteId)
+    .eq("user_id", currentUserId);
+  if (error) throw error;
+}
+
+/**
+ * Full-text search across title, description, and extracted file content
+ * (title/description weighted higher than file content — see the
+ * content_tsv column in 0012_note_fulltext_search.sql).
+ */
+export async function searchNotesByText(
+  supabase: SupabaseClient,
+  query: string,
+  currentUserId: string | null
+): Promise<NoteWithMeta[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const { data, error } = await supabase
+    .from("notes")
+    .select(NOTE_SELECT)
+    .textSearch("content_tsv", trimmed, { type: "websearch", config: "english" })
+    .order("upvote_count", { ascending: false })
+    .limit(30);
+  if (error) throw error;
+
+  const rows = (data ?? []) as unknown as RawNoteRow[];
+  const noteIds = rows.map((row) => row.id);
+  const [upvotedNoteIds, bookmarkedNoteIds] = await Promise.all([
+    getUpvotedNoteIds(supabase, currentUserId, noteIds),
+    getBookmarkedNoteIds(supabase, currentUserId, noteIds),
+  ]);
+
+  return rows.map((row) => toNoteWithMeta(row, upvotedNoteIds, bookmarkedNoteIds));
 }
 
 /**
@@ -188,17 +272,16 @@ export async function searchNotesByTags(
   if (error) throw error;
 
   const rows = (data ?? []) as unknown as RawNoteRow[];
-  const upvotedNoteIds = await getUpvotedNoteIds(
-    supabase,
-    currentUserId,
-    rankedNoteIds
-  );
+  const [upvotedNoteIds, bookmarkedNoteIds] = await Promise.all([
+    getUpvotedNoteIds(supabase, currentUserId, rankedNoteIds),
+    getBookmarkedNoteIds(supabase, currentUserId, rankedNoteIds),
+  ]);
 
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   return rankedNoteIds
     .map((id) => rowsById.get(id))
     .filter((row): row is RawNoteRow => row !== undefined)
-    .map((row) => toNoteWithMeta(row, upvotedNoteIds));
+    .map((row) => toNoteWithMeta(row, upvotedNoteIds, bookmarkedNoteIds));
 }
 
 /**
@@ -280,4 +363,87 @@ export async function getRecentlyViewed(
       unitId: row.notes!.unit_id,
       viewedAt: row.viewed_at,
     }));
+}
+
+/**
+ * New notes uploaded (by someone else) since the user's last notification
+ * check, in subjects they've uploaded to, viewed, or upvoted in — see
+ * get_new_notes_for_user() in 0013_note_notifications.sql for how "their
+ * subjects" is inferred.
+ */
+export async function getNewNotes(
+  supabase: SupabaseClient,
+  userId: string,
+  since: string,
+  limit = 20
+): Promise<NewNoteNotification[]> {
+  const { data, error } = await supabase.rpc("get_new_notes_for_user", {
+    p_user_id: userId,
+    p_since: since,
+    p_limit: limit,
+  });
+  if (error) throw error;
+
+  return (
+    (data ?? []) as {
+      note_id: string;
+      title: string;
+      unit_id: string;
+      subject_id: string;
+      subject_name: string;
+      created_at: string;
+    }[]
+  ).map((row) => ({
+    noteId: row.note_id,
+    title: row.title,
+    unitId: row.unit_id,
+    subjectId: row.subject_id,
+    subjectName: row.subject_name,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function markNotificationsSeen(supabase: SupabaseClient, userId: string) {
+  const { error } = await supabase
+    .from("users")
+    .update({ notifications_last_seen_at: new Date().toISOString() })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+export async function getBookmarkedNotes(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<NoteWithMeta[]> {
+  const { data, error } = await supabase
+    .from("bookmarks")
+    .select(`created_at, notes ( ${NOTE_SELECT} )`)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const rows = ((data ?? []) as unknown as { notes: RawNoteRow | null }[])
+    .map((row) => row.notes)
+    .filter((row): row is RawNoteRow => row !== null);
+
+  const upvotedNoteIds = await getUpvotedNoteIds(
+    supabase,
+    userId,
+    rows.map((row) => row.id)
+  );
+  const bookmarkedNoteIds = new Set(rows.map((row) => row.id));
+
+  return rows.map((row) => toNoteWithMeta(row, upvotedNoteIds, bookmarkedNoteIds));
+}
+
+export async function toggleBookmark(
+  supabase: SupabaseClient,
+  noteId: string,
+  userId: string,
+  currentlyBookmarked: boolean
+) {
+  const { error } = currentlyBookmarked
+    ? await supabase.from("bookmarks").delete().eq("note_id", noteId).eq("user_id", userId)
+    : await supabase.from("bookmarks").insert({ note_id: noteId, user_id: userId });
+  if (error) throw error;
 }

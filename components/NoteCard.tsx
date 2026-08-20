@@ -1,10 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Card from "@/components/Card";
+import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/auth-context";
+import { toggleBookmark } from "@/lib/notes";
 import type { NoteWithMeta } from "@/lib/types";
+
+const REPORT_REASONS = [
+  "Wrong subject or unit",
+  "Spam or low quality",
+  "Inappropriate content",
+  "Copyright or plagiarism",
+  "Other",
+];
 
 type NoteCardProps = {
   note: NoteWithMeta;
@@ -21,8 +32,47 @@ export default function NoteCard({
   isOwner = false,
   onDelete,
 }: NoteCardProps) {
+  const supabase = useMemo(() => createClient(), []);
+  const { user } = useAuth();
   const [downloading, setDownloading] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportStatus, setReportStatus] = useState<"idle" | "submitting" | "reported" | "error">(
+    "idle"
+  );
+  const [bookmarked, setBookmarked] = useState(note.bookmarked_by_me);
+  const [bookmarkBusy, setBookmarkBusy] = useState(false);
+
+  async function handleToggleBookmark() {
+    if (!user || bookmarkBusy) return;
+    const next = !bookmarked;
+    setBookmarked(next);
+    setBookmarkBusy(true);
+    try {
+      await toggleBookmark(supabase, note.id, user.id, !next);
+    } catch (err) {
+      console.error("Toggle bookmark failed:", err);
+      setBookmarked(!next);
+    } finally {
+      setBookmarkBusy(false);
+    }
+  }
+
+  async function submitReport(reason: string) {
+    if (!user) return;
+    setReportStatus("submitting");
+    const { error } = await supabase
+      .from("note_reports")
+      .insert({ note_id: note.id, reporter_id: user.id, reason });
+
+    if (error) {
+      // Unique violation means they've already reported this note.
+      setReportStatus(error.code === "23505" ? "reported" : "error");
+    } else {
+      setReportStatus("reported");
+    }
+    setReportOpen(false);
+  }
 
   async function handleDownload() {
     onView?.(note.id);
@@ -89,6 +139,36 @@ export default function NoteCard({
             {note.upvote_count}
           </motion.span>
         </motion.button>
+
+        {user && (
+          <motion.button
+            type="button"
+            onClick={handleToggleBookmark}
+            disabled={bookmarkBusy}
+            aria-pressed={bookmarked}
+            aria-label={bookmarked ? "Remove bookmark" : "Save for later"}
+            whileTap={{ scale: 0.9 }}
+            className={`flex shrink-0 items-center justify-center rounded-lg px-2.5 py-1.5 transition-colors duration-150 ${
+              bookmarked
+                ? "bg-amber-400/15 text-amber-500"
+                : "bg-slate-900/5 text-slate-500 hover:bg-slate-900/10 dark:bg-white/10 dark:text-slate-400 dark:hover:bg-white/20"
+            }`}
+          >
+            <svg
+              viewBox="0 0 20 20"
+              className="h-4 w-4"
+              fill={bookmarked ? "currentColor" : "none"}
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 3.5A1.5 1.5 0 0 1 6.5 2h7A1.5 1.5 0 0 1 15 3.5v13.34a.5.5 0 0 1-.79.41L10 14.13l-4.21 3.12a.5.5 0 0 1-.79-.41V3.5Z"
+              />
+            </svg>
+          </motion.button>
+        )}
       </div>
 
       {note.description && (
@@ -176,6 +256,53 @@ export default function NoteCard({
               </button>
             )}
           </>
+        )}
+
+        {!isOwner && user && (
+          <div className="relative">
+            {reportStatus === "reported" ? (
+              <span className="text-sm font-medium text-slate-400 dark:text-slate-500">
+                Reported
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setReportOpen((prev) => !prev)}
+                disabled={reportStatus === "submitting"}
+                className="text-sm font-medium text-slate-500 hover:text-slate-700 disabled:opacity-60 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                Report
+              </button>
+            )}
+
+            <AnimatePresence>
+              {reportOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute bottom-full left-0 z-10 mb-2 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl dark:border-white/10 dark:bg-slate-900"
+                >
+                  {REPORT_REASONS.map((reason) => (
+                    <button
+                      key={reason}
+                      type="button"
+                      onClick={() => submitReport(reason)}
+                      className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-900/5 dark:text-slate-300 dark:hover:bg-white/10"
+                    >
+                      {reason}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+        {reportStatus === "error" && (
+          <span className="text-xs text-red-600 dark:text-red-400">
+            Couldn&apos;t submit report. Try again.
+          </span>
         )}
       </div>
     </Card>

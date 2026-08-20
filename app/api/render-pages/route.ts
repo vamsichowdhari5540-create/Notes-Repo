@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAllowedStorageUrl } from "@/lib/storage-url";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,7 @@ const MAX_PAGES = 24;
 // the client a page-by-page image strip on demand.
 export async function POST(request: Request) {
   const { fileUrl } = await request.json();
-  if (typeof fileUrl !== "string") {
+  if (typeof fileUrl !== "string" || !isAllowedStorageUrl(fileUrl)) {
     return NextResponse.json({ error: "fileUrl is required" }, { status: 400 });
   }
 

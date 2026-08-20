@@ -61,7 +61,7 @@ interface ImageBoxProps {
     style?: CSSProperties;
 }
 
-const srcOf = (image: any): string =>
+const srcOf = (image: string | ImageBoxImage): string =>
     typeof image === "string" ? image : (image?.src ?? "");
 
 export default function ImageBox(props: Partial<ImageBoxProps>) {

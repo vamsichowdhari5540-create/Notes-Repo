@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import Avatar from "@/components/Avatar";
+import NotificationBell from "@/components/NotificationBell";
 
 const navLinks = [
   { href: "/browse", label: "Browse" },
@@ -47,12 +48,20 @@ export default function NavBar() {
           <div className="flex items-center gap-3">
             {user ? (
               <>
+                <NotificationBell userId={user.id} />
                 <Link href="/dashboard" aria-label="Your dashboard" className="shrink-0">
-                  <Avatar
-                    src={user.user_metadata?.avatar_url}
-                    name={user.user_metadata?.name ?? user.email ?? "?"}
-                    size="sm"
-                  />
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 22 }}
+                    className="rounded-full ring-2 ring-transparent transition-shadow duration-300 hover:shadow-md hover:shadow-amber-500/25 hover:ring-amber-400/70"
+                  >
+                    <Avatar
+                      src={user.user_metadata?.avatar_url}
+                      name={user.user_metadata?.name ?? user.email ?? "?"}
+                      size="sm"
+                    />
+                  </motion.div>
                 </Link>
                 <motion.button
                   whileHover={{ scale: 1.04 }}

@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import {
   deleteNote,
+  getBookmarkedNotes,
   getNotesForUser,
   getRecentlyViewed,
 } from "@/lib/notes";
@@ -26,6 +27,7 @@ export default function DashboardPage() {
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [notes, setNotes] = useState<NoteWithMeta[]>([]);
+  const [savedNotes, setSavedNotes] = useState<NoteWithMeta[]>([]);
   const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedNote[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +42,7 @@ export default function DashboardPage() {
 
     async function load() {
       setLoading(true);
-      const [{ data: profileData }, notesData, recentlyViewedData] =
+      const [{ data: profileData }, notesData, savedNotesData, recentlyViewedData] =
         await Promise.all([
           supabase
             .from("users")
@@ -48,12 +50,14 @@ export default function DashboardPage() {
             .eq("id", user!.id)
             .single(),
           getNotesForUser(supabase, user!.id),
+          getBookmarkedNotes(supabase, user!.id).catch(() => []),
           getRecentlyViewed(supabase, user!.id, 5).catch(() => []),
         ]);
       setProfile(profileData ?? null);
       setBranch(profileData?.branch ?? "");
       setYear(profileData?.year ? String(profileData.year) : "");
       setNotes(notesData);
+      setSavedNotes(savedNotesData);
       setRecentlyViewed(recentlyViewedData);
       setLoading(false);
     }
@@ -85,14 +89,19 @@ export default function DashboardPage() {
       )
     );
 
-    if (note.upvoted_by_me) {
-      await supabase
-        .from("upvotes")
-        .delete()
-        .eq("note_id", noteId)
-        .eq("user_id", user.id);
-    } else {
-      await supabase.from("upvotes").insert({ note_id: noteId, user_id: user.id });
+    const { error } = note.upvoted_by_me
+      ? await supabase
+          .from("upvotes")
+          .delete()
+          .eq("note_id", noteId)
+          .eq("user_id", user.id)
+      : await supabase.from("upvotes").insert({ note_id: noteId, user_id: user.id });
+
+    if (error) {
+      console.error("Toggle upvote failed:", error);
+      setNotes((prev) => prev.map((n) => (n.id === noteId ? note : n)));
+      setToast("Couldn't update your rating.");
+      return;
     }
 
     const { data } = await supabase
@@ -110,9 +119,15 @@ export default function DashboardPage() {
   }
 
   async function handleDeleteNote(noteId: string) {
-    await deleteNote(supabase, noteId);
-    setNotes((prev) => prev.filter((n) => n.id !== noteId));
-    setToast("Note deleted.");
+    if (!user) return;
+    try {
+      await deleteNote(supabase, noteId, user.id);
+      setNotes((prev) => prev.filter((n) => n.id !== noteId));
+      setToast("Note deleted.");
+    } catch (err) {
+      console.error("Delete note failed:", err);
+      setToast("Couldn't delete that note.");
+    }
   }
 
   async function handleSaveProfile(event: FormEvent) {
@@ -374,6 +389,29 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+
+          {savedNotes.length > 0 && (
+            <div className="mt-10">
+              <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                Saved for later
+              </h2>
+
+              <div className="mt-4">
+                <motion.div
+                  variants={staggerContainer}
+                  initial="hidden"
+                  animate="show"
+                  className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                >
+                  {savedNotes.map((note) => (
+                    <motion.div key={note.id} variants={fadeInUp}>
+                      <NoteCard note={note} />
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </div>
+            </div>
+          )}
 
           {recentlyViewed.length > 0 && (
             <div className="mt-10">

@@ -4,6 +4,7 @@ export type Subject = {
   code: string;
   branch: string | null;
   semester: number | null;
+  year: number | null;
 };
 
 export type Unit = {
@@ -39,6 +40,7 @@ export type NoteWithMeta = {
   uploader_name: string;
   tags: Tag[];
   upvoted_by_me: boolean;
+  bookmarked_by_me: boolean;
 };
 
 export type LeaderboardEntry = {
@@ -53,4 +55,13 @@ export type RecentlyViewedNote = {
   viewedAt: string;
   title: string;
   unitId: string;
+};
+
+export type NewNoteNotification = {
+  noteId: string;
+  title: string;
+  unitId: string;
+  subjectId: string;
+  subjectName: string;
+  createdAt: string;
 };

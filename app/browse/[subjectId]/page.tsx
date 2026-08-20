@@ -23,7 +23,7 @@ export default function SubjectUnitsPage() {
       const [{ data: subjectData }, { data: unitsData }] = await Promise.all([
         supabase
           .from("subjects")
-          .select("id, name, code, branch, semester")
+          .select("id, name, code, branch, semester, year")
           .eq("id", params.subjectId)
           .single(),
         supabase

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAllowedStorageUrl } from "@/lib/storage-url";
 
 export const runtime = "nodejs";
 
@@ -7,9 +8,13 @@ const VISION_MODEL = "gemini-flash-latest";
 
 const TEXT_SYSTEM_PROMPT = `You are a content moderation classifier for a college study-notes sharing site. Given the text below (a note's title, description, and/or extracted document text), decide whether it contains: sexually explicit / 18+ content, profanity or slurs, hate speech, or harassment. Respond ONLY with strict JSON: {"flagged": boolean, "reason": string}. "reason" should be a short (under 15 words) explanation, or an empty string if not flagged.`;
 
-const VISION_SYSTEM_PROMPT = `You are a content moderation classifier for a college study-notes sharing site. Look at the image(s) provided and decide whether any of them show sexually explicit / 18+ content, graphic violence, or other content inappropriate for a classroom setting. Respond ONLY with strict JSON: {"flagged": boolean, "reason": string}. "reason" should be a short (under 15 words) explanation, or an empty string if not flagged.`;
+const VISION_SYSTEM_PROMPT = `You are looking at page image(s) from a college study-notes upload. Do two things:
+1. Moderation: decide whether any image shows sexually explicit / 18+ content, graphic violence, or other content inappropriate for a classroom setting.
+2. Transcription: transcribe all readable text from the image(s) as plain text, including handwriting, in reading order. If there's no readable text, use an empty string.
+Respond ONLY with strict JSON: {"flagged": boolean, "reason": string, "text": string}. "reason" should be a short (under 15 words) explanation, or an empty string if not flagged.`;
 
 type ModerationResult = { flagged: boolean; reason: string };
+type VisionResult = ModerationResult & { text: string };
 
 // unpdf bundles a serverless-friendly build of pdf.js (no web worker, no
 // browser-only globals like DOMMatrix), which is what makes PDF text
@@ -138,14 +143,16 @@ async function toInlineImage(
 // Groq doesn't currently offer a vision-capable model, so image content
 // (raw PNG/JPG uploads, and scanned-PDF pages rendered as images) is
 // checked with Gemini instead — the only place vision moderation happens.
-async function checkImages(imageUrls: string[], apiKey: string): Promise<ModerationResult> {
-  if (imageUrls.length === 0) return { flagged: false, reason: "" };
+// This same call also transcribes any readable/handwritten text so scanned
+// notes are searchable, not just typed ones.
+async function checkImages(imageUrls: string[], apiKey: string): Promise<VisionResult> {
+  if (imageUrls.length === 0) return { flagged: false, reason: "", text: "" };
 
   try {
     const images = (
       await Promise.all(imageUrls.slice(0, 3).map(toInlineImage))
     ).filter((img): img is { mimeType: string; data: string } => img !== null);
-    if (images.length === 0) return { flagged: false, reason: "" };
+    if (images.length === 0) return { flagged: false, reason: "", text: "" };
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${VISION_MODEL}:generateContent?key=${apiKey}`,
@@ -170,7 +177,7 @@ async function checkImages(imageUrls: string[], apiKey: string): Promise<Moderat
 
     if (!response.ok) {
       console.error("Gemini vision moderation failed:", await response.text());
-      return { flagged: false, reason: "" };
+      return { flagged: false, reason: "", text: "" };
     }
 
     const data = await response.json();
@@ -179,28 +186,38 @@ async function checkImages(imageUrls: string[], apiKey: string): Promise<Moderat
     return {
       flagged: Boolean(parsed.flagged),
       reason: typeof parsed.reason === "string" ? parsed.reason : "",
+      text: typeof parsed.text === "string" ? parsed.text : "",
     };
   } catch (err) {
     console.error("Vision moderation failed:", err);
-    return { flagged: false, reason: "" };
+    return { flagged: false, reason: "", text: "" };
   }
 }
 
 export async function POST(request: Request) {
   const { fileUrl, fileType, title, description } = await request.json();
 
-  const groqKey = process.env.GROQ_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!groqKey && !geminiKey) {
-    return NextResponse.json({ flagged: false });
+  if (typeof fileUrl !== "string" || !isAllowedStorageUrl(fileUrl)) {
+    return NextResponse.json({ error: "fileUrl is required" }, { status: 400 });
   }
 
+  // Extracted regardless of whether moderation keys are set — the upload
+  // flow persists this as searchable note content either way.
   const extractedText =
     fileType === "pdf"
       ? await extractPdfText(fileUrl)
       : fileType === "docx"
         ? await extractDocxText(fileUrl)
         : "";
+
+  const groqKey = process.env.GROQ_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!groqKey && !geminiKey) {
+    console.warn(
+      "Content moderation is disabled: no GROQ_API_KEY or GEMINI_API_KEY set."
+    );
+    return NextResponse.json({ flagged: false, extractedText });
+  }
 
   const isImageFile = fileType === "png" || fileType === "jpg" || fileType === "jpeg";
   // A PDF with almost no extractable text is very likely a scanned/
@@ -224,11 +241,15 @@ export async function POST(request: Request) {
     groqKey ? checkText(textToCheck, groqKey) : Promise.resolve({ flagged: false, reason: "" }),
     geminiKey
       ? checkImages(imageUrlsToCheck, geminiKey)
-      : Promise.resolve({ flagged: false, reason: "" }),
+      : Promise.resolve({ flagged: false, reason: "", text: "" }),
   ]);
 
   const flagged = textResult.flagged || visionResult.flagged;
   const reason = [textResult.reason, visionResult.reason].filter(Boolean).join("; ");
+  const fullExtractedText = [extractedText, visionResult.text]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 6000);
 
-  return NextResponse.json({ flagged, reason });
+  return NextResponse.json({ flagged, reason, extractedText: fullExtractedText });
 }

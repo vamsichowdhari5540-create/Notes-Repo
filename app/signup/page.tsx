@@ -16,14 +16,16 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setNotice(null);
     setSubmitting(true);
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { name } },
@@ -33,6 +35,20 @@ export default function SignupPage() {
 
     if (error) {
       setError(error.message);
+      return;
+    }
+
+    // Supabase returns a user with no identities (and no error) when the
+    // email is already registered, to avoid leaking which emails exist.
+    if (data.user && data.user.identities?.length === 0) {
+      setError("That email is already registered. Try logging in instead.");
+      return;
+    }
+
+    // No session means email confirmation is required before the account
+    // is usable — there's nothing to redirect into yet.
+    if (!data.session) {
+      setNotice("Check your email to confirm your account before logging in.");
       return;
     }
 
@@ -108,6 +124,11 @@ export default function SignupPage() {
                 {error}
               </p>
             )}
+            {notice && (
+              <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+                {notice}
+              </p>
+            )}
 
             <motion.button
               whileHover={{ scale: 1.02 }}
@@ -121,7 +142,7 @@ export default function SignupPage() {
           </form>
 
           <div className="mt-6">
-            <OAuthButtons />
+            <OAuthButtons onError={setError} />
           </div>
 
           <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">

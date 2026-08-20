@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import Card from "@/components/Card";
@@ -10,12 +10,30 @@ import OAuthButtons from "@/components/OAuthButtons";
 import { PerspectiveBackground } from "@/components/originkit/ui/hero-03/perspective-background";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const oauthError = searchParams.get("error");
+    if (oauthError) setError(oauthError);
+    const oauthNotice = searchParams.get("notice");
+    if (oauthNotice) setNotice(oauthNotice);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -34,7 +52,8 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/browse");
+    const next = searchParams.get("next");
+    router.push(next && next.startsWith("/") ? next : "/browse");
     router.refresh();
   }
 
@@ -77,12 +96,20 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-slate-700 dark:text-slate-300"
-              >
-                Password
-              </label>
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+                >
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 id="password"
                 type="password"
@@ -93,6 +120,11 @@ export default function LoginPage() {
               />
             </div>
 
+            {notice && (
+              <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+                {notice}
+              </p>
+            )}
             {error && (
               <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400">
                 {error}
@@ -111,7 +143,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6">
-            <OAuthButtons />
+            <OAuthButtons onError={setError} />
           </div>
 
           <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">

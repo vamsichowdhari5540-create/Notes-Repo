@@ -84,14 +84,18 @@ export default function UnitNotesPage() {
       )
     );
 
-    if (note.upvoted_by_me) {
-      await supabase
-        .from("upvotes")
-        .delete()
-        .eq("note_id", noteId)
-        .eq("user_id", user.id);
-    } else {
-      await supabase.from("upvotes").insert({ note_id: noteId, user_id: user.id });
+    const { error } = note.upvoted_by_me
+      ? await supabase
+          .from("upvotes")
+          .delete()
+          .eq("note_id", noteId)
+          .eq("user_id", user.id)
+      : await supabase.from("upvotes").insert({ note_id: noteId, user_id: user.id });
+
+    if (error) {
+      console.error("Toggle upvote failed:", error);
+      setNotes((prev) => prev.map((n) => (n.id === noteId ? note : n)));
+      return;
     }
 
     const { data } = await supabase

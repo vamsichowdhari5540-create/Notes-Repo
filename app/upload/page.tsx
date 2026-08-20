@@ -8,24 +8,14 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import Toast from "@/components/Toast";
 import Card from "@/components/Card";
+import {
+  ACCEPTED_FILE_EXT,
+  ACCEPTED_FILE_TYPES,
+  MAX_FILE_SIZE,
+  formatFileSize,
+} from "@/lib/upload-constraints";
+import { findSimilarTitle } from "@/lib/similar-title";
 import type { Subject, Tag, Unit } from "@/lib/types";
-
-// .doc (legacy binary Word format) is intentionally excluded — there's no
-// reliable way to extract its text for moderation, so allowing it would be
-// an easy way to bypass the content check entirely.
-const ACCEPTED_TYPES = [
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "image/png",
-  "image/jpeg",
-];
-const ACCEPTED_EXT = ".pdf,.docx,.png,.jpg,.jpeg";
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 export default function UploadPage() {
   return (
@@ -46,6 +36,7 @@ function UploadForm() {
   const [subjectsLoading, setSubjectsLoading] = useState(true);
   const [units, setUnits] = useState<Unit[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [unitNotes, setUnitNotes] = useState<{ id: string; title: string }[]>([]);
 
   const [subjectId, setSubjectId] = useState("");
   const [unitId, setUnitId] = useState("");
@@ -63,7 +54,7 @@ function UploadForm() {
   useEffect(() => {
     supabase
       .from("subjects")
-      .select("id, name, code, branch, semester")
+      .select("id, name, code, branch, semester, year")
       .order("name")
       .then(({ data }) => {
         setSubjects(data ?? []);
@@ -88,6 +79,18 @@ function UploadForm() {
       .order("unit_number")
       .then(({ data }) => setUnits(data ?? []));
   }, [subjectId, supabase]);
+
+  useEffect(() => {
+    if (!unitId) {
+      setUnitNotes([]);
+      return;
+    }
+    supabase
+      .from("notes")
+      .select("id, title")
+      .eq("unit_id", unitId)
+      .then(({ data }) => setUnitNotes(data ?? []));
+  }, [unitId, supabase]);
 
   // Pre-select subject/unit when arriving from a unit's "upload the first note" link.
   useEffect(() => {
@@ -116,6 +119,8 @@ function UploadForm() {
     (tag) => tag.name.toLowerCase() === tagQuery.trim().toLowerCase()
   );
 
+  const similarNote = findSimilarTitle(title, unitNotes);
+
   function addTag(tag: Tag) {
     setSelectedTags((prev) => [...prev, tag]);
     setTagQuery("");
@@ -141,10 +146,17 @@ function UploadForm() {
 
   function pickFile(candidate: File | undefined) {
     if (!candidate) return;
-    if (!ACCEPTED_TYPES.includes(candidate.type)) {
+    if (!ACCEPTED_FILE_TYPES.includes(candidate.type)) {
       setErrors((prev) => ({
         ...prev,
         file: "Only PDF, DOCX, PNG, or JPG files are supported.",
+      }));
+      return;
+    }
+    if (candidate.size > MAX_FILE_SIZE) {
+      setErrors((prev) => ({
+        ...prev,
+        file: "File must be under 20MB.",
       }));
       return;
     }
@@ -217,6 +229,10 @@ function UploadForm() {
           description: description.trim() || null,
           file_url: publicUrl,
           file_type: ext,
+          content_text:
+            typeof moderation.extractedText === "string" && moderation.extractedText.trim()
+              ? moderation.extractedText.slice(0, 6000)
+              : null,
         })
         .select("id")
         .single();
@@ -353,6 +369,12 @@ function UploadForm() {
             {errors.title && (
               <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.title}</p>
             )}
+            {!errors.title && similarNote && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                A note titled &ldquo;{similarNote.title}&rdquo; already exists in this unit —
+                you can still upload if this one&apos;s different.
+              </p>
+            )}
           </div>
 
           <div>
@@ -451,7 +473,7 @@ function UploadForm() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept={ACCEPTED_EXT}
+                accept={ACCEPTED_FILE_EXT}
                 className="hidden"
                 onChange={(e) => pickFile(e.target.files?.[0])}
               />

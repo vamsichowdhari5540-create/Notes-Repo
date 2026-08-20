@@ -2,12 +2,20 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
-import { deleteNote, getNoteById, updateNote } from "@/lib/notes";
+import { deleteNote, getNoteById, replaceNoteFile, updateNote } from "@/lib/notes";
+import { storagePathFromPublicUrl } from "@/lib/storage-url";
+import {
+  ACCEPTED_FILE_EXT,
+  ACCEPTED_FILE_TYPES,
+  MAX_FILE_SIZE,
+  formatFileSize,
+} from "@/lib/upload-constraints";
 import Card from "@/components/Card";
+import Toast from "@/components/Toast";
 import { CardSkeleton } from "@/components/Skeleton";
 import type { NoteWithMeta, Tag } from "@/lib/types";
 
@@ -31,6 +39,11 @@ export default function EditNotePage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [replacingFile, setReplacingFile] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
   useEffect(() => {
     async function load() {
       setLoading(true);
@@ -50,6 +63,12 @@ export default function EditNotePage() {
     load();
   }, [params.noteId, supabase]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   const tagSuggestions = allTags.filter(
     (tag) =>
       tag.name.toLowerCase().includes(tagQuery.trim().toLowerCase()) &&
@@ -66,7 +85,7 @@ export default function EditNotePage() {
   }
 
   async function handleSave() {
-    if (!note) return;
+    if (!note || !user) return;
     if (!title.trim()) {
       setError("Title is required.");
       return;
@@ -77,6 +96,7 @@ export default function EditNotePage() {
       await updateNote(
         supabase,
         note.id,
+        user.id,
         { title: title.trim(), description: description.trim() || null },
         selectedTags.map((t) => t.id)
       );
@@ -89,15 +109,88 @@ export default function EditNotePage() {
   }
 
   async function handleDelete() {
-    if (!note) return;
+    if (!note || !user) return;
     setDeleting(true);
     try {
-      await deleteNote(supabase, note.id);
+      await deleteNote(supabase, note.id, user.id);
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete note.");
       setDeleting(false);
+    }
+  }
+
+  async function handleReplaceFile(file: File | undefined) {
+    if (!file || !note || !user) return;
+
+    if (!ACCEPTED_FILE_TYPES.includes(file.type)) {
+      setFileError("Only PDF, DOCX, PNG, or JPG files are supported.");
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      setFileError("File must be under 20MB.");
+      return;
+    }
+
+    setFileError(null);
+    setReplacingFile(true);
+
+    try {
+      const ext = file.name.split(".").pop() ?? "";
+      const path = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage.from("notes").upload(path, file);
+      if (uploadError) throw uploadError;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("notes").getPublicUrl(path);
+
+      const moderationRes = await fetch("/api/moderate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileUrl: publicUrl,
+          fileType: ext,
+          title: title.trim(),
+          description: description.trim(),
+        }),
+      });
+      const moderation = await moderationRes.json();
+      if (moderation.flagged) {
+        await supabase.storage.from("notes").remove([path]);
+        setFileError(
+          `This file was flagged and can't be used${
+            moderation.reason ? `: ${moderation.reason}` : "."
+          }`
+        );
+        setReplacingFile(false);
+        return;
+      }
+
+      const contentText =
+        typeof moderation.extractedText === "string" && moderation.extractedText.trim()
+          ? moderation.extractedText.slice(0, 6000)
+          : null;
+
+      await replaceNoteFile(supabase, note.id, user.id, {
+        file_url: publicUrl,
+        file_type: ext,
+        content_text: contentText,
+      });
+
+      const oldPath = storagePathFromPublicUrl(note.file_url, "notes");
+      if (oldPath) {
+        await supabase.storage.from("notes").remove([oldPath]);
+      }
+
+      setNote((prev) => (prev ? { ...prev, file_url: publicUrl, file_type: ext } : prev));
+      setToast("File replaced!");
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : "Failed to replace the file.");
+    } finally {
+      setReplacingFile(false);
     }
   }
 
@@ -220,6 +313,33 @@ export default function EditNotePage() {
               </div>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                File
+              </label>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Current: {note?.file_type?.toUpperCase()} file
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPTED_FILE_EXT}
+                className="hidden"
+                onChange={(e) => handleReplaceFile(e.target.files?.[0])}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={replacingFile}
+                className="mt-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-slate-400 disabled:opacity-60 dark:border-white/20 dark:text-slate-300 dark:hover:border-white/40"
+              >
+                {replacingFile ? "Replacing…" : "Replace file"}
+              </button>
+              {fileError && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fileError}</p>
+              )}
+            </div>
+
             {error && (
               <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400">
                 {error}
@@ -271,6 +391,8 @@ export default function EditNotePage() {
           </form>
         </Card>
       )}
+
+      <AnimatePresence>{toast && <Toast message={toast} />}</AnimatePresence>
     </div>
   );
 }

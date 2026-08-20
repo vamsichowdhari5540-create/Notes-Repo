@@ -3,14 +3,19 @@
 import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 
-export default function OAuthButtons() {
+export default function OAuthButtons({
+  onError,
+}: {
+  onError?: (message: string) => void;
+}) {
   const supabase = createClient();
 
   async function signInWith(provider: "google" | "github") {
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
+    if (error) onError?.(error.message);
   }
 
   return (
