@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     const pages: string[] = [];
     for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
       const dataUrl = await renderPageAsImage(pdf, pageNum, {
-        scale: 1.4,
+        scale: 1.0,
         toDataURL: true,
         canvasImport: () => import("@napi-rs/canvas"),
       });
