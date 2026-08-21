@@ -25,20 +25,21 @@ export async function POST(request: Request) {
     const pdf = await getDocumentProxy(new Uint8Array(arrayBuffer));
     const pageCount = Math.min(pdf.numPages, MAX_PAGES);
 
-    // Pages are independent, so rendering them concurrently instead of one
-    // at a time cuts wall-clock time roughly in proportion to page count —
-    // the difference between a multi-page PDF taking one page's worth of
-    // time vs. N pages' worth.
-    const pageNumbers = Array.from({ length: pageCount }, (_, i) => i + 1);
-    const pages = await Promise.all(
-      pageNumbers.map((pageNum) =>
-        renderPageAsImage(pdf, pageNum, {
-          scale: 1.4,
-          toDataURL: true,
-          canvasImport: () => import("@napi-rs/canvas"),
-        })
-      )
-    );
+    // Rendering pages concurrently was tried and made things worse: this is
+    // CPU-bound native rasterization (@napi-rs/canvas), not I/O — running
+    // many at once on a single-vCPU serverless function causes memory/CPU
+    // contention instead of overlap, and the request stopped completing at
+    // all. Sequential is the correct approach here; the scale reduction
+    // below is what actually cuts per-page render time.
+    const pages: string[] = [];
+    for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+      const dataUrl = await renderPageAsImage(pdf, pageNum, {
+        scale: 1.4,
+        toDataURL: true,
+        canvasImport: () => import("@napi-rs/canvas"),
+      });
+      pages.push(dataUrl);
+    }
 
     return NextResponse.json({ pages, totalPages: pdf.numPages });
   } catch (err) {
