@@ -254,7 +254,11 @@ export default function DashboardPage() {
             <Card className="p-6 lg:col-span-1">
               <div className="flex flex-col items-center text-center">
                 <label className="group relative cursor-pointer">
-                  <Avatar src={profile?.avatar_url} name={profile?.name ?? "?"} size="md" />
+                  <Avatar
+                    src={profile?.avatar_url ?? user?.user_metadata?.avatar_url}
+                    name={profile?.name ?? "?"}
+                    size="md"
+                  />
                   <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-xs font-medium text-transparent transition-colors group-hover:bg-black/40 group-hover:text-white">
                     {uploadingAvatar ? "…" : "Change"}
                   </span>
