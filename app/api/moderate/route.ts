@@ -1,8 +1,50 @@
+import { createHash } from "crypto";
+import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { isAllowedStorageUrl } from "@/lib/storage-url";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+// Reuses the flipbook's page-render cache bucket (0015_flipbook_cache.sql)
+// with a distinct key suffix so scanned-PDF moderation checks don't pay to
+// re-render the same pages every time — a "-moderate" suffix keeps this
+// separate from the flipbook viewer's own cache entries for the same file,
+// since the two render at different scales/page counts.
+const CACHE_BUCKET = "flipbook-cache";
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+function moderationCacheKeyFor(fileUrl: string): string {
+  return `${createHash("sha256").update(fileUrl).digest("hex")}-moderate.json`;
+}
+
+async function readPageCache(cacheKey: string): Promise<string[] | null> {
+  try {
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(CACHE_BUCKET).getPublicUrl(cacheKey);
+    const res = await fetch(publicUrl, { cache: "no-store" });
+    if (!res.ok) return null;
+    const cached = await res.json();
+    return Array.isArray(cached?.images) && cached.images.length > 0 ? cached.images : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writePageCache(cacheKey: string, images: string[]) {
+  try {
+    await supabase.storage.from(CACHE_BUCKET).upload(cacheKey, JSON.stringify({ images }), {
+      contentType: "application/json",
+      upsert: true,
+    });
+  } catch (err) {
+    console.error("Moderation page-render cache write failed:", err);
+  }
+}
 
 const TEXT_MODEL = "qwen/qwen3.6-27b";
 const VISION_MODEL = "gemini-flash-latest";
@@ -57,7 +99,14 @@ async function extractDocxText(fileUrl: string): Promise<string> {
 // A scanned/photographed set of notes saved as a PDF has no real text
 // layer — each page is just an image. Render the first few pages so they
 // can go through the vision check instead of silently skipping moderation.
+// Rendering is the expensive part (seconds per page), so the result is
+// cached per file — repeat moderation checks on the same upload (retries,
+// re-runs) reuse it instead of re-rendering from scratch.
 async function renderPdfPagesAsImages(fileUrl: string, maxPages = 3): Promise<string[]> {
+  const cacheKey = moderationCacheKeyFor(fileUrl);
+  const cached = await readPageCache(cacheKey);
+  if (cached) return cached;
+
   try {
     const response = await fetch(fileUrl);
     if (!response.ok) return [];
@@ -75,6 +124,8 @@ async function renderPdfPagesAsImages(fileUrl: string, maxPages = 3): Promise<st
       });
       images.push(dataUrl);
     }
+
+    if (images.length > 0) await writePageCache(cacheKey, images);
     return images;
   } catch (err) {
     console.error("PDF page rendering failed:", err);
