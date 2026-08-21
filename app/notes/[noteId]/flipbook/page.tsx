@@ -15,6 +15,7 @@ export default function FlipbookPage() {
 
   const [note, setNote] = useState<NoteWithMeta | null>(null);
   const [pages, setPages] = useState<string[] | null>(null);
+  const [totalPages, setTotalPages] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -53,6 +54,7 @@ export default function FlipbookPage() {
           setError("Couldn't render this PDF for the flipbook.");
         } else {
           setPages(data.pages);
+          setTotalPages(typeof data.totalPages === "number" ? data.totalPages : null);
         }
       } catch {
         if (!cancelled) setError("Couldn't render this PDF for the flipbook.");
@@ -107,7 +109,25 @@ export default function FlipbookPage() {
         </div>
       )}
 
-      {!loading && !error && pages && <FlipbookViewer pages={pages} />}
+      {!loading && !error && pages && (
+        <>
+          {totalPages !== null && totalPages > pages.length && (
+            <p className="text-center text-sm text-slate-500">
+              Showing the first {pages.length} of {totalPages} pages.{" "}
+              <a
+                href={note?.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-amber-600 hover:text-amber-700"
+              >
+                Download the full PDF
+              </a>{" "}
+              to see the rest.
+            </p>
+          )}
+          <FlipbookViewer pages={pages} />
+        </>
+      )}
     </div>
   );
 }

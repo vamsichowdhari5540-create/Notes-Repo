@@ -6,7 +6,7 @@ import { isAllowedStorageUrl } from "@/lib/storage-url";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_PAGES = 24;
+const MAX_PAGES = 12;
 const CACHE_BUCKET = "flipbook-cache";
 
 const supabase = createClient(
