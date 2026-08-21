@@ -3,7 +3,7 @@ import { isAllowedStorageUrl } from "@/lib/storage-url";
 
 export const runtime = "nodejs";
 
-const TEXT_MODEL = "llama-3.3-70b-versatile";
+const TEXT_MODEL = "qwen/qwen3.6-27b";
 const VISION_MODEL = "gemini-flash-latest";
 
 const TEXT_SYSTEM_PROMPT = `You are a content moderation classifier for a college study-notes sharing site. Given the text below (a note's title, description, and/or extracted document text), decide whether it contains: sexually explicit / 18+ content, profanity or slurs, hate speech, or harassment. Respond ONLY with strict JSON: {"flagged": boolean, "reason": string}. "reason" should be a short (under 15 words) explanation, or an empty string if not flagged.`;
@@ -94,6 +94,10 @@ async function checkText(text: string, apiKey: string): Promise<ModerationResult
       body: JSON.stringify({
         model: TEXT_MODEL,
         temperature: 0,
+        // This is a simple classification call, not a reasoning task —
+        // disable Qwen's thinking mode so it responds directly with the
+        // JSON object instead of a slower step-by-step reasoning trace.
+        reasoning_effort: "none",
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: TEXT_SYSTEM_PROMPT },
