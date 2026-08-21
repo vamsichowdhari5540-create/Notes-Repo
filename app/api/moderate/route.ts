@@ -144,58 +144,114 @@ async function toInlineImage(
   }
 }
 
-// Groq doesn't currently offer a vision-capable model, so image content
-// (raw PNG/JPG uploads, and scanned-PDF pages rendered as images) is
-// checked with Gemini instead — the only place vision moderation happens.
-// This same call also transcribes any readable/handwritten text so scanned
-// notes are searchable, not just typed ones.
-async function checkImages(imageUrls: string[], apiKey: string): Promise<VisionResult> {
+type InlineImage = { mimeType: string; data: string };
+
+function parseVisionResult(raw: string): VisionResult {
+  const parsed = JSON.parse(raw);
+  return {
+    flagged: Boolean(parsed.flagged),
+    reason: typeof parsed.reason === "string" ? parsed.reason : "",
+    text: typeof parsed.text === "string" ? parsed.text : "",
+  };
+}
+
+async function callGeminiVision(images: InlineImage[], apiKey: string): Promise<VisionResult> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${VISION_MODEL}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: VISION_SYSTEM_PROMPT },
+              ...images.map((img) => ({
+                inline_data: { mime_type: img.mimeType, data: img.data },
+              })),
+            ],
+          },
+        ],
+        generationConfig: { responseMimeType: "application/json" },
+      }),
+    }
+  );
+  if (!response.ok) throw new Error(`Gemini vision failed: ${await response.text()}`);
+
+  const data = await response.json();
+  return parseVisionResult(data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+}
+
+// Qwen3.6 27B (via Groq) supports image input too, so it doubles as a
+// fallback vision model when Gemini is unavailable or rate-limited —
+// avoids the whole upload pipeline going unmoderated just because one
+// provider's free-tier quota ran out.
+async function callQwenVision(images: InlineImage[], apiKey: string): Promise<VisionResult> {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: TEXT_MODEL,
+      temperature: 0,
+      reasoning_effort: "none",
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: VISION_SYSTEM_PROMPT },
+            ...images.map((img) => ({
+              type: "image_url",
+              image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+            })),
+          ],
+        },
+      ],
+    }),
+  });
+  if (!response.ok) throw new Error(`Qwen vision failed: ${await response.text()}`);
+
+  const data = await response.json();
+  return parseVisionResult(data.choices?.[0]?.message?.content ?? "{}");
+}
+
+// Tries Gemini first (generally stronger vision quality), falling back to
+// Qwen on Groq if Gemini errors or hits its rate limit, so a single
+// provider's outage/quota doesn't leave image uploads unmoderated. This
+// also transcribes any readable/handwritten text so scanned notes are
+// searchable, not just typed ones.
+async function checkImages(
+  imageUrls: string[],
+  geminiKey: string | undefined,
+  groqKey: string | undefined
+): Promise<VisionResult> {
   if (imageUrls.length === 0) return { flagged: false, reason: "", text: "" };
 
-  try {
-    const images = (
-      await Promise.all(imageUrls.slice(0, 3).map(toInlineImage))
-    ).filter((img): img is { mimeType: string; data: string } => img !== null);
-    if (images.length === 0) return { flagged: false, reason: "", text: "" };
+  const images = (
+    await Promise.all(imageUrls.slice(0, 3).map(toInlineImage))
+  ).filter((img): img is InlineImage => img !== null);
+  if (images.length === 0) return { flagged: false, reason: "", text: "" };
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${VISION_MODEL}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: VISION_SYSTEM_PROMPT },
-                ...images.map((img) => ({
-                  inline_data: { mime_type: img.mimeType, data: img.data },
-                })),
-              ],
-            },
-          ],
-          generationConfig: { responseMimeType: "application/json" },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      console.error("Gemini vision moderation failed:", await response.text());
-      return { flagged: false, reason: "", text: "" };
+  if (geminiKey) {
+    try {
+      return await callGeminiVision(images, geminiKey);
+    } catch (err) {
+      console.error("Gemini vision failed, falling back to Qwen:", err);
     }
-
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-    const parsed = JSON.parse(text);
-    return {
-      flagged: Boolean(parsed.flagged),
-      reason: typeof parsed.reason === "string" ? parsed.reason : "",
-      text: typeof parsed.text === "string" ? parsed.text : "",
-    };
-  } catch (err) {
-    console.error("Vision moderation failed:", err);
-    return { flagged: false, reason: "", text: "" };
   }
+
+  if (groqKey) {
+    try {
+      return await callQwenVision(images, groqKey);
+    } catch (err) {
+      console.error("Qwen vision fallback also failed:", err);
+    }
+  }
+
+  return { flagged: false, reason: "", text: "" };
 }
 
 export async function POST(request: Request) {
@@ -243,8 +299,8 @@ export async function POST(request: Request) {
 
   const [textResult, visionResult] = await Promise.all([
     groqKey ? checkText(textToCheck, groqKey) : Promise.resolve({ flagged: false, reason: "" }),
-    geminiKey
-      ? checkImages(imageUrlsToCheck, geminiKey)
+    geminiKey || groqKey
+      ? checkImages(imageUrlsToCheck, geminiKey, groqKey)
       : Promise.resolve({ flagged: false, reason: "", text: "" }),
   ]);
 
