@@ -207,27 +207,45 @@ function parseVisionResult(raw: string): VisionResult {
   };
 }
 
+// Gemini has no client-side timeout by default, and under real load it can
+// take 20+ seconds to respond even when it's about to fail (observed
+// directly: a 503 "high demand" error that itself took 22s to arrive).
+// Without a hard cutoff here, a struggling Gemini eats most of the
+// function's time budget before the Qwen fallback ever gets a chance to
+// run. 15s is generous for a normal response but short enough to leave
+// real room for the fallback afterward.
+const GEMINI_TIMEOUT_MS = 15000;
+
 async function callGeminiVision(images: InlineImage[], apiKey: string): Promise<VisionResult> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${VISION_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: VISION_SYSTEM_PROMPT },
-              ...images.map((img) => ({
-                inline_data: { mime_type: img.mimeType, data: img.data },
-              })),
-            ],
-          },
-        ],
-        generationConfig: { responseMimeType: "application/json" },
-      }),
-    }
-  );
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${VISION_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: VISION_SYSTEM_PROMPT },
+                ...images.map((img) => ({
+                  inline_data: { mime_type: img.mimeType, data: img.data },
+                })),
+              ],
+            },
+          ],
+          generationConfig: { responseMimeType: "application/json" },
+        }),
+        signal: controller.signal,
+      }
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) throw new Error(`Gemini vision failed: ${await response.text()}`);
 
   const data = await response.json();
