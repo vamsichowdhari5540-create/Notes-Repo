@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAllowedStorageUrl } from "@/lib/storage-url";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const TEXT_MODEL = "qwen/qwen3.6-27b";
 const VISION_MODEL = "gemini-flash-latest";
