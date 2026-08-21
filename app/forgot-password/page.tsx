@@ -95,7 +95,7 @@ export default function ForgotPasswordPage() {
           {step === "request" ? (
             <>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Enter your email and we&apos;ll send you a 6-digit code.
+                Enter your email and we&apos;ll send you a one-time code.
               </p>
               <form onSubmit={handleRequestCode} className="mt-6 flex flex-col gap-4">
                 <div>
@@ -135,8 +135,7 @@ export default function ForgotPasswordPage() {
           ) : (
             <>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Enter the 6-digit code we sent to <strong>{email}</strong>, plus your new
-                password.
+                Enter the code we sent to <strong>{email}</strong>, plus your new password.
               </p>
               <form onSubmit={handleVerifyAndReset} className="mt-6 flex flex-col gap-4">
                 <div>
@@ -144,7 +143,7 @@ export default function ForgotPasswordPage() {
                     htmlFor="code"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                   >
-                    6-digit code
+                    Code from email
                   </label>
                   <input
                     id="code"
@@ -155,7 +154,7 @@ export default function ForgotPasswordPage() {
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-white/40 bg-white/70 px-3 py-2 text-sm tracking-widest text-slate-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
-                    placeholder="123456"
+                    placeholder="Enter the code from your email"
                   />
                 </div>
                 <div>
