@@ -41,6 +41,8 @@ export type NoteWithMeta = {
   tags: Tag[];
   upvoted_by_me: boolean;
   bookmarked_by_me: boolean;
+  summary: string | null;
+  ai_verified: boolean;
 };
 
 export type LeaderboardEntry = {

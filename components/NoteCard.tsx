@@ -98,9 +98,26 @@ export default function NoteCard({
     <Card hover className="p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
-            {note.title}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
+              {note.title}
+            </h3>
+            {note.ai_verified && (
+              <span
+                title="Automatically screened by AI for content policy and quality"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
+              >
+                <svg viewBox="0 0 20 20" className="h-3 w-3" fill="currentColor">
+                  <path
+                    fillRule="evenodd"
+                    d="M10 1.5l7.5 3.3v5.4c0 4.6-3.2 8.9-7.5 9.9-4.3-1-7.5-5.3-7.5-9.9V4.8L10 1.5Zm3.7 6.3-4.4 4.4-2.2-2.2a.75.75 0 0 0-1.06 1.06l2.75 2.75a.75.75 0 0 0 1.06 0l4.93-4.93a.75.75 0 1 0-1.06-1.06Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                AI-Verified
+              </span>
+            )}
+          </div>
           <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
             by {note.uploader_name}
           </p>
@@ -171,11 +188,16 @@ export default function NoteCard({
         )}
       </div>
 
-      {note.description && (
+      {note.description ? (
         <p className="mt-3 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
           {note.description}
         </p>
-      )}
+      ) : note.summary ? (
+        <p className="mt-3 line-clamp-2 text-sm italic text-slate-500 dark:text-slate-400">
+          <span className="not-italic text-slate-400 dark:text-slate-500">AI summary: </span>
+          {note.summary}
+        </p>
+      ) : null}
 
       {note.tags.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">

@@ -17,6 +17,13 @@ import {
 import { findSimilarTitle } from "@/lib/similar-title";
 import type { Subject, Tag, Unit } from "@/lib/types";
 
+const REJECTION_INFO: Record<string, { emoji: string; title: string }> = {
+  content: { emoji: "🚫", title: "Content policy violation" },
+  relevance: { emoji: "📚", title: "Doesn't look like academic content" },
+  quality: { emoji: "🔍", title: "Image quality issue" },
+};
+const DEFAULT_REJECTION = { emoji: "⚠️", title: "Upload rejected" };
+
 export default function UploadPage() {
   return (
     <Suspense fallback={null}>
@@ -50,6 +57,9 @@ function UploadForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [rejection, setRejection] = useState<{ category: string | null; reason: string } | null>(
+    null
+  );
 
   useEffect(() => {
     supabase
@@ -144,6 +154,32 @@ function UploadForm() {
     setSelectedTags((prev) => prev.filter((t) => t.id !== tagId));
   }
 
+  // Matches AI-suggested tag names against existing tags (case-insensitive),
+  // creating any that don't exist yet — same "authenticated users can add
+  // tags" path the manual tag input already uses.
+  async function resolveOrCreateTags(names: string[]): Promise<Tag[]> {
+    const resolved: Tag[] = [];
+    for (const rawName of names) {
+      const name = rawName.trim().toLowerCase();
+      if (!name) continue;
+      const existing = allTags.find((t) => t.name.toLowerCase() === name);
+      if (existing) {
+        resolved.push(existing);
+        continue;
+      }
+      const { data, error } = await supabase
+        .from("tags")
+        .insert({ name })
+        .select("id, name")
+        .single();
+      if (!error && data) {
+        setAllTags((prev) => [...prev, data]);
+        resolved.push(data);
+      }
+    }
+    return resolved;
+  }
+
   function pickFile(candidate: File | undefined) {
     if (!candidate) return;
     if (!ACCEPTED_FILE_TYPES.includes(candidate.type)) {
@@ -183,6 +219,7 @@ function UploadForm() {
   async function handleSubmit() {
     if (!validate() || !file || !user) return;
     setSubmitting(true);
+    setRejection(null);
 
     try {
       const ext = file.name.split(".").pop() ?? "";
@@ -210,15 +247,30 @@ function UploadForm() {
       const moderation = await moderationRes.json();
       if (moderation.flagged) {
         await supabase.storage.from("notes").remove([path]);
-        setErrors((prev) => ({
-          ...prev,
-          submit: `This upload was flagged and can't be posted${
-            moderation.reason ? `: ${moderation.reason}` : "."
-          }`,
-        }));
+        setRejection({
+          category: typeof moderation.category === "string" ? moderation.category : null,
+          reason: typeof moderation.reason === "string" && moderation.reason ? moderation.reason : "This upload doesn't meet our content guidelines.",
+        });
         setSubmitting(false);
         return;
       }
+
+      // AI-suggested tags merge with whatever the uploader already picked —
+      // existing selections win on name collisions, nothing is duplicated.
+      const suggestedTags: string[] = Array.isArray(moderation.tags) ? moderation.tags : [];
+      const resolvedSuggested = await resolveOrCreateTags(suggestedTags);
+      const mergedTags = [
+        ...selectedTags,
+        ...resolvedSuggested.filter(
+          (t) => !selectedTags.some((s) => s.id === t.id)
+        ),
+      ];
+
+      const summary =
+        typeof moderation.summary === "string" && moderation.summary.trim()
+          ? moderation.summary.trim()
+          : null;
+      const aiVerified = Boolean(moderation.aiVerified);
 
       const { data: note, error: insertError } = await supabase
         .from("notes")
@@ -229,6 +281,8 @@ function UploadForm() {
           description: description.trim() || null,
           file_url: publicUrl,
           file_type: ext,
+          summary,
+          ai_verified: aiVerified,
           content_text:
             typeof moderation.extractedText === "string" && moderation.extractedText.trim()
               ? moderation.extractedText.slice(0, 6000)
@@ -238,15 +292,27 @@ function UploadForm() {
         .single();
       if (insertError) throw insertError;
 
-      if (selectedTags.length > 0) {
+      if (mergedTags.length > 0) {
         const { error: tagError } = await supabase.from("note_tags").insert(
-          selectedTags.map((tag) => ({ note_id: note.id, tag_id: tag.id }))
+          mergedTags.map((tag) => ({ note_id: note.id, tag_id: tag.id }))
         );
         if (tagError) throw tagError;
       }
 
-      setToast("Note uploaded!");
-      setTimeout(() => router.push(`/units/${unitId}`), 800);
+      // Non-blocking sanity check: does the AI's detected unit match what
+      // was actually selected? Informational only — the note is already
+      // saved either way.
+      const detectedUnit = Number.isInteger(moderation.unit) ? moderation.unit : null;
+      const selectedUnitNumber = units.find((u) => u.id === unitId)?.unit_number ?? null;
+      const unitMismatch =
+        detectedUnit !== null && selectedUnitNumber !== null && detectedUnit !== selectedUnitNumber;
+
+      const tagNote = resolvedSuggested.length > 0 ? ` ${resolvedSuggested.length} tag${resolvedSuggested.length === 1 ? "" : "s"} auto-added.` : "";
+      const unitNote = unitMismatch
+        ? ` Heads up: this looks like Unit ${detectedUnit} content, but you filed it under Unit ${selectedUnitNumber}.`
+        : "";
+      setToast(`Note uploaded!${tagNote}${unitNote}`);
+      setTimeout(() => router.push(`/units/${unitId}`), unitMismatch ? 2200 : 800);
     } catch (err) {
       console.error("Upload failed:", err);
       const message =
@@ -501,6 +567,18 @@ function UploadForm() {
               <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.file}</p>
             )}
           </div>
+
+          {rejection && (
+            <div className="rounded-lg border border-red-200 bg-red-500/10 px-4 py-3 dark:border-red-500/30">
+              <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                {(rejection.category && REJECTION_INFO[rejection.category]?.emoji) ??
+                  DEFAULT_REJECTION.emoji}{" "}
+                {(rejection.category && REJECTION_INFO[rejection.category]?.title) ??
+                  DEFAULT_REJECTION.title}
+              </p>
+              <p className="mt-1 text-sm text-red-600 dark:text-red-300">{rejection.reason}</p>
+            </div>
+          )}
 
           {errors.submit && (
             <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400">

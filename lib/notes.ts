@@ -15,11 +15,13 @@ type RawNoteRow = {
   upvote_count: number;
   created_at: string;
   user_id: string;
+  summary: string | null;
+  ai_verified: boolean;
   users: { name: string } | null;
   note_tags: { tags: { id: string; name: string } | null }[];
 };
 
-const NOTE_SELECT = `id, title, description, file_url, file_type, upvote_count, created_at, user_id,
+const NOTE_SELECT = `id, title, description, file_url, file_type, upvote_count, created_at, user_id, summary, ai_verified,
        users ( name ),
        note_tags ( tags ( id, name ) )`;
 
@@ -77,6 +79,8 @@ function toNoteWithMeta(
       .filter((tag): tag is { id: string; name: string } => tag !== null),
     upvoted_by_me: upvotedNoteIds.has(row.id),
     bookmarked_by_me: bookmarkedNoteIds.has(row.id),
+    summary: row.summary,
+    ai_verified: row.ai_verified,
   };
 }
 

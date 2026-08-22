@@ -49,15 +49,33 @@ async function writePageCache(cacheKey: string, images: string[]) {
 const TEXT_MODEL = "qwen/qwen3.6-27b";
 const VISION_MODEL = "gemini-flash-latest";
 
-const TEXT_SYSTEM_PROMPT = `You are a content moderation classifier for a college study-notes sharing site. Given the text below (a note's title, description, and/or extracted document text), decide whether it contains: sexually explicit / 18+ content, profanity or slurs, hate speech, or harassment. Respond ONLY with strict JSON: {"flagged": boolean, "reason": string}. "reason" should be a short (under 15 words) explanation, or an empty string if not flagged.`;
+// "category" distinguishes *why* an upload was rejected so the UI can give
+// actionable feedback instead of one generic "flagged" message:
+// - "content": a real policy violation (explicit/hateful/harassing material)
+// - "relevance": not flagged for safety, but clearly not academic content
+// - "quality": image is too blurry/dark/incomplete to be usable
+type FlagCategory = "content" | "relevance" | "quality" | null;
 
-const VISION_SYSTEM_PROMPT = `You are looking at page image(s) from a college study-notes upload. Do two things:
-1. Moderation: decide whether any image shows sexually explicit / 18+ content, graphic violence, or other content inappropriate for a classroom setting.
-2. Transcription: transcribe all readable text from the image(s) as plain text, including handwriting, in reading order. If there's no readable text, use an empty string.
-Respond ONLY with strict JSON: {"flagged": boolean, "reason": string, "text": string}. "reason" should be a short (under 15 words) explanation, or an empty string if not flagged.`;
+const TEXT_SYSTEM_PROMPT = `You are reviewing text for a college study-notes sharing site (a note's title, description, and/or extracted/transcribed document text). Do two checks:
+1. Moderation: does it contain sexually explicit / 18+ content, profanity or slurs, hate speech, or harassment?
+2. Relevance: is this genuinely academic/study material, or is it clearly unrelated spam, an ad, or non-academic content someone uploaded by mistake?
+Respond ONLY with strict JSON: {"flagged": boolean, "category": "content" | "relevance" | null, "reason": string}. "category" is null when not flagged. "reason" is a short (under 15 words) explanation, or an empty string if not flagged.`;
 
-type ModerationResult = { flagged: boolean; reason: string };
+const VISION_SYSTEM_PROMPT = `You are looking at page image(s) from a college study-notes upload. Do three things:
+1. Moderation: does any image show sexually explicit / 18+ content, graphic violence, or other content inappropriate for a classroom setting?
+2. Quality: is the image too blurry, too dark, or too incomplete/cut-off to actually be usable as study material? (Normal handwriting or scan imperfections are fine — only flag genuinely unreadable images.)
+3. Transcription: transcribe all readable text from the image(s) as plain text, including handwriting, in reading order. If there's no readable text, use an empty string.
+Respond ONLY with strict JSON: {"flagged": boolean, "category": "content" | "quality" | null, "reason": string, "text": string}. "category" is null when not flagged. "reason" is a short (under 15 words) explanation, or an empty string if not flagged.`;
+
+const ANALYZE_SYSTEM_PROMPT = `You are analyzing the text of a college study-notes upload (title plus its content). Do three things:
+1. Write a 2-sentence summary of what this note covers.
+2. Suggest 3-6 short topic tags (lowercase, no punctuation, a student would search for) describing the content.
+3. If the text mentions a specific unit or chapter number (e.g. "Unit 3", "UNIT - I", "Chapter 5"), extract just that number as "unit" — otherwise null.
+Respond ONLY with strict JSON: {"summary": string, "tags": string[], "unit": number | null}.`;
+
+type ModerationResult = { flagged: boolean; category: FlagCategory; reason: string };
 type VisionResult = ModerationResult & { text: string };
+type AnalyzeResult = { summary: string; tags: string[]; unit: number | null };
 
 // unpdf bundles a serverless-friendly build of pdf.js (no web worker, no
 // browser-only globals like DOMMatrix), which is what makes PDF text
@@ -133,8 +151,12 @@ async function renderPdfPagesAsImages(fileUrl: string, maxPages = 3): Promise<st
   }
 }
 
+function parseCategory(raw: unknown): FlagCategory {
+  return raw === "content" || raw === "relevance" || raw === "quality" ? raw : null;
+}
+
 async function checkText(text: string, apiKey: string): Promise<ModerationResult> {
-  if (!text.trim()) return { flagged: false, reason: "" };
+  if (!text.trim()) return { flagged: false, category: null, reason: "" };
 
   try {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -160,18 +182,67 @@ async function checkText(text: string, apiKey: string): Promise<ModerationResult
 
     if (!response.ok) {
       console.error("Groq text moderation failed:", await response.text());
-      return { flagged: false, reason: "" };
+      return { flagged: false, category: null, reason: "" };
     }
 
     const data = await response.json();
     const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
     return {
       flagged: Boolean(parsed.flagged),
+      category: parseCategory(parsed.category),
       reason: typeof parsed.reason === "string" ? parsed.reason : "",
     };
   } catch (err) {
     console.error("Text moderation failed:", err);
-    return { flagged: false, reason: "" };
+    return { flagged: false, category: null, reason: "" };
+  }
+}
+
+async function analyzeContent(
+  text: string,
+  title: string,
+  apiKey: string
+): Promise<AnalyzeResult> {
+  const empty: AnalyzeResult = { summary: "", tags: [], unit: null };
+  const input = [title, text].filter(Boolean).join("\n\n").slice(0, 8000);
+  if (!input.trim()) return empty;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: TEXT_MODEL,
+        temperature: 0,
+        reasoning_effort: "none",
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: ANALYZE_SYSTEM_PROMPT },
+          { role: "user", content: input },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Content analysis failed:", await response.text());
+      return empty;
+    }
+
+    const data = await response.json();
+    const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
+    return {
+      summary: typeof parsed.summary === "string" ? parsed.summary.slice(0, 500) : "",
+      tags: Array.isArray(parsed.tags)
+        ? parsed.tags.filter((t: unknown): t is string => typeof t === "string").slice(0, 6)
+        : [],
+      unit: Number.isInteger(parsed.unit) ? parsed.unit : null,
+    };
+  } catch (err) {
+    console.error("Content analysis failed:", err);
+    return empty;
   }
 }
 
@@ -202,6 +273,7 @@ function parseVisionResult(raw: string): VisionResult {
   const parsed = JSON.parse(raw);
   return {
     flagged: Boolean(parsed.flagged),
+    category: parseCategory(parsed.category),
     reason: typeof parsed.reason === "string" ? parsed.reason : "",
     text: typeof parsed.text === "string" ? parsed.text : "",
   };
@@ -298,12 +370,12 @@ async function checkImages(
   geminiKey: string | undefined,
   groqKey: string | undefined
 ): Promise<VisionResult> {
-  if (imageUrls.length === 0) return { flagged: false, reason: "", text: "" };
+  if (imageUrls.length === 0) return { flagged: false, category: null, reason: "", text: "" };
 
   const images = (
     await Promise.all(imageUrls.slice(0, 3).map(toInlineImage))
   ).filter((img): img is InlineImage => img !== null);
-  if (images.length === 0) return { flagged: false, reason: "", text: "" };
+  if (images.length === 0) return { flagged: false, category: null, reason: "", text: "" };
 
   if (geminiKey) {
     try {
@@ -321,7 +393,7 @@ async function checkImages(
     }
   }
 
-  return { flagged: false, reason: "", text: "" };
+  return { flagged: false, category: null, reason: "", text: "" };
 }
 
 export async function POST(request: Request) {
@@ -346,7 +418,18 @@ export async function POST(request: Request) {
     console.warn(
       "Content moderation is disabled: no GROQ_API_KEY or GEMINI_API_KEY set."
     );
-    return NextResponse.json({ flagged: false, extractedText });
+    // aiVerified stays false here on purpose — no real check ran, so the
+    // upload shouldn't claim an "AI-Verified" badge it didn't earn.
+    return NextResponse.json({
+      flagged: false,
+      category: null,
+      reason: "",
+      extractedText,
+      summary: "",
+      tags: [],
+      unit: null,
+      aiVerified: false,
+    });
   }
 
   const isImageFile = fileType === "png" || fileType === "jpg" || fileType === "jpeg";
@@ -368,18 +451,39 @@ export async function POST(request: Request) {
     .slice(0, 8000);
 
   const [textResult, visionResult] = await Promise.all([
-    groqKey ? checkText(textToCheck, groqKey) : Promise.resolve({ flagged: false, reason: "" }),
+    groqKey
+      ? checkText(textToCheck, groqKey)
+      : Promise.resolve({ flagged: false, category: null, reason: "" } as ModerationResult),
     geminiKey || groqKey
       ? checkImages(imageUrlsToCheck, geminiKey, groqKey)
-      : Promise.resolve({ flagged: false, reason: "", text: "" }),
+      : Promise.resolve({ flagged: false, category: null, reason: "", text: "" } as VisionResult),
   ]);
 
   const flagged = textResult.flagged || visionResult.flagged;
+  // Vision's category (e.g. a blurry scan) is the more specific/actionable
+  // signal when both fire — prefer it over text's.
+  const category = visionResult.category ?? textResult.category;
   const reason = [textResult.reason, visionResult.reason].filter(Boolean).join("; ");
   const fullExtractedText = [extractedText, visionResult.text]
     .filter(Boolean)
     .join("\n\n")
     .slice(0, 6000);
 
-  return NextResponse.json({ flagged, reason, extractedText: fullExtractedText });
+  // Summary/tags/unit are only worth generating for content that actually
+  // made it through moderation — no point analyzing something rejected.
+  const analysis =
+    !flagged && groqKey
+      ? await analyzeContent(fullExtractedText, title ?? "", groqKey)
+      : { summary: "", tags: [], unit: null };
+
+  return NextResponse.json({
+    flagged,
+    category,
+    reason,
+    extractedText: fullExtractedText,
+    summary: analysis.summary,
+    tags: analysis.tags,
+    unit: analysis.unit,
+    aiVerified: true,
+  });
 }
