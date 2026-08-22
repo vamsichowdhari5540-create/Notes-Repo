@@ -147,9 +147,15 @@ export default function EditNotePage() {
         data: { publicUrl },
       } = supabase.storage.from("notes").getPublicUrl(path);
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const moderationRes = await fetch("/api/moderate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token ?? ""}`,
+        },
         body: JSON.stringify({
           fileUrl: publicUrl,
           fileType: ext,

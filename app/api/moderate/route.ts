@@ -397,6 +397,19 @@ async function checkImages(
 }
 
 export async function POST(request: Request) {
+  // This route drives paid AI calls (Groq/Gemini) and PDF rendering, and is
+  // only ever called from the authenticated upload/edit flows — reject
+  // anyone else so it can't be hit directly as a free cost-abuse target.
+  const authHeader = request.headers.get("authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { fileUrl, fileType, title, description } = await request.json();
 
   if (typeof fileUrl !== "string" || !isAllowedStorageUrl(fileUrl)) {
